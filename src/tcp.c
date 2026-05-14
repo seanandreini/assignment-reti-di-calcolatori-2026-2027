@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 // librerire per socket
 /*
@@ -19,11 +20,37 @@
 #include "../lib/argparse/argparse.h"
 
 #define MAX_MESSAGE_SIZE 1024
+#define JAN_1970 2208988800UL // detto da gemini
 
+struct ntp_timestamp{
+  uint32_t seconds;
+  uint32_t fraction;
+};
+
+//* FATTO CON GEMINI
+struct ntp_timestamp get_rfc8877_timestamp() {
+  struct timeval tv;
+  struct ntp_timestamp ts;
+
+  gettimeofday(&tv, NULL);
+
+  ts.seconds = htonl(tv.tv_sec + JAN_1970);
+
+  uint64_t frac = (uint64_t)tv.tv_usec * 4294967296ULL / 1000000ULL;
+  ts.fraction = htonl((uint32_t)frac);
+
+  return ts;
+};
+
+struct packet{
+  struct ntp_timestamp ts;
+  char message[MAX_MESSAGE_SIZE];
+};
 
 void client_tcp(const char* ip_addr, int port, int num_packets){
   int clientfd, result_code;
   struct sockaddr_in server_addr;
+  struct packet packet;
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(port);
@@ -42,20 +69,30 @@ void client_tcp(const char* ip_addr, int port, int num_packets){
 
   printf("Type message to send to server: \n");
 
-  char input[MAX_MESSAGE_SIZE];
-  fgets(input, sizeof(input), stdin);
-  input[strcspn(input, "\r\n")] = 0;
+  fgets(packet.message, sizeof(packet.message), stdin);
+  packet.message[strcspn(packet.message, "\r\n")] = 0;
 
   for(int i=0; i<num_packets; i++){
-    if(send(clientfd, input, strlen(input), 0) == -1){
+    packet.ts = get_rfc8877_timestamp();
+    if(send(clientfd, &packet, sizeof(struct packet), 0) == -1){
       perror("Error sending message to server.\n");
     }
 
-    char buffer[MAX_MESSAGE_SIZE];
-    int n = recv(clientfd, buffer, MAX_MESSAGE_SIZE-1, 0);
+    int n = recv(clientfd, &packet, sizeof(struct packet), 0);
     if(n > 0){
-      buffer[n] = '\0';
-      printf("[ECHO]: %s\n", buffer);
+      struct timeval now;
+      gettimeofday(&now, NULL);
+      
+      //* fatto con gemini
+      double rtt = (double)(now.tv_sec + JAN_1970 - ntohl(packet.ts.seconds)) * 1000.0;
+
+      // 2. Differenza tra le frazioni (convertendo i microsecondi di 'now' in millisecondi)
+      double fraction_now = (double)now.tv_usec / 1000.0;
+      double fraction_packet = ((double)ntohl(packet.ts.fraction) * 1000.0 / 4294967296ULL);
+
+      rtt += (fraction_now - fraction_packet);
+
+      printf("[ECHO]: %s. RTT: %.3f\n", packet.message, rtt);
     }
   }
 
@@ -101,8 +138,8 @@ void server_tcp(int port){
       printf("Connection accepted from %s:%d.\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
       while(1){
-        char buffer[MAX_MESSAGE_SIZE];
-        int bytes_received = recv(clientfd, buffer, MAX_MESSAGE_SIZE-1, 0);
+        struct packet packet;
+        int bytes_received = recv(clientfd, &packet, sizeof(struct packet), 0);
 
         if(bytes_received < 0){
           printf("Error in receiveng from client.\n");
@@ -111,10 +148,9 @@ void server_tcp(int port){
           break;
         }
         else{
-          buffer[bytes_received] = '\0';
-          printf("[RECEIVED]: %s\n", buffer);
+          printf("[RECEIVED]: %s\n", packet.message);
 
-          if(send(clientfd, buffer, strlen(buffer), 0) == -1){
+          if(send(clientfd, &packet, sizeof(struct packet), 0) == -1){
             perror("Error sending echo.");
           }
         }
