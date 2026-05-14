@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 // librerire per socket
 /*
@@ -16,6 +17,8 @@
 
 // others
 #include "../lib/argparse/argparse.h"
+
+#define MESSAGE_SIZE 1024
 
 
 void client_tcp(const char* ip_addr, int port){
@@ -36,6 +39,19 @@ void client_tcp(const char* ip_addr, int port){
   } while(result_code == -1);
 
   printf("Connected to %s:%d\n", ip_addr, port);
+
+  while(1){
+    printf("Type message to send to server: \n");
+  
+    char input[MESSAGE_SIZE];
+    fgets(input, sizeof(input), stdin);
+    input[strcspn(input, "\r\n")] = 0;
+    if(send(clientfd, input, strlen(input), 0) == -1){
+      perror("Error sending message to server.\n");
+    }
+  
+    printf("Message sent.\n");
+  }
 
   close(clientfd); //! ATTENZIONE A WINDOWS
   printf("Connection closed.\n");
@@ -78,7 +94,21 @@ void server_tcp(int port){
     else{
       printf("Connection accepted from %s:%d.\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
-     
+      while(1){
+        char buffer[MESSAGE_SIZE];
+        int bytes_received = recv(clientfd, buffer, MESSAGE_SIZE-1, 0);
+
+        if(bytes_received < 0){
+          printf("Error in receiveng from client.\n");
+        }
+        else if(bytes_received == 0){
+          break;
+        }
+        else{
+          buffer[bytes_received] = '\0';
+          printf("Client sent: %s\n", buffer);
+        }
+      }
 
       printf("Connection closed from %s:%d.\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
       close(clientfd); //! ATTENZIONE PER WINDOWS
