@@ -18,10 +18,10 @@
 // others
 #include "../lib/argparse/argparse.h"
 
-#define MESSAGE_SIZE 1024
+#define MAX_MESSAGE_SIZE 1024
 
 
-void client_tcp(const char* ip_addr, int port){
+void client_tcp(const char* ip_addr, int port, int num_packets){
   int clientfd, result_code;
   struct sockaddr_in server_addr;
 
@@ -40,17 +40,23 @@ void client_tcp(const char* ip_addr, int port){
 
   printf("Connected to %s:%d\n", ip_addr, port);
 
-  while(1){
-    printf("Type message to send to server: \n");
-  
-    char input[MESSAGE_SIZE];
-    fgets(input, sizeof(input), stdin);
-    input[strcspn(input, "\r\n")] = 0;
+  printf("Type message to send to server: \n");
+
+  char input[MAX_MESSAGE_SIZE];
+  fgets(input, sizeof(input), stdin);
+  input[strcspn(input, "\r\n")] = 0;
+
+  for(int i=0; i<num_packets; i++){
     if(send(clientfd, input, strlen(input), 0) == -1){
       perror("Error sending message to server.\n");
     }
-  
-    printf("Message sent.\n");
+
+    char buffer[MAX_MESSAGE_SIZE];
+    int n = recv(clientfd, buffer, MAX_MESSAGE_SIZE-1, 0);
+    if(n > 0){
+      buffer[n] = '\0';
+      printf("[ECHO]: %s\n", buffer);
+    }
   }
 
   close(clientfd); //! ATTENZIONE A WINDOWS
@@ -95,8 +101,8 @@ void server_tcp(int port){
       printf("Connection accepted from %s:%d.\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
       while(1){
-        char buffer[MESSAGE_SIZE];
-        int bytes_received = recv(clientfd, buffer, MESSAGE_SIZE-1, 0);
+        char buffer[MAX_MESSAGE_SIZE];
+        int bytes_received = recv(clientfd, buffer, MAX_MESSAGE_SIZE-1, 0);
 
         if(bytes_received < 0){
           printf("Error in receiveng from client.\n");
@@ -106,7 +112,11 @@ void server_tcp(int port){
         }
         else{
           buffer[bytes_received] = '\0';
-          printf("Client sent: %s\n", buffer);
+          printf("[RECEIVED]: %s\n", buffer);
+
+          if(send(clientfd, buffer, strlen(buffer), 0) == -1){
+            perror("Error sending echo.");
+          }
         }
       }
 
@@ -127,6 +137,7 @@ static const char *const usages[] = {
 int main(int argc, const char **argv){
   int port = 12345;
   int listening_mode = 0;
+  int num_packets = 1;
   const char* host = NULL;
 
   signal(SIGCHLD, SIG_IGN);
@@ -136,6 +147,7 @@ int main(int argc, const char **argv){
     OPT_GROUP("basic options"),
     OPT_BOOLEAN('l', "listen", &listening_mode, "run in listening mode (server)", NULL, 0, 0),
     OPT_INTEGER('p', "port", &port, "port of connection", NULL, 0, 0),
+    OPT_INTEGER('n', "num_packets", &num_packets, "number of packets to send", NULL, 0, 0),
     OPT_STRING('H', "host", &host, "ip address", NULL, 0, 0),
     OPT_END()
   };
@@ -150,7 +162,7 @@ int main(int argc, const char **argv){
   switch (listening_mode)
   {
   case 0: // client
-    client_tcp(host, port);
+    client_tcp(host, port, num_packets);
     break;
   
   case 1: // server
