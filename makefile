@@ -3,16 +3,13 @@ src = ./src
 bin = ./bin
 lib = ./lib
 
-all: tcp udp
+all: main
 	@echo "Done."
 
-tcp: $(src)/tcp.c argparse.o | $(bin)
-	@echo "Compiling tcp..."
-	@gcc -g -o $(bin)/tcp $(src)/tcp.c $(build)/argparse.o
+main: $(src)/main.c argparse.o | $(bin)
+	@echo "Compiling main..."
+	@gcc -g -o $(bin)/main $(src)/main.c $(build)/argparse.o
 
-udp: $(src)/udp.c argparse.o | $(bin)
-	@echo "Compiling udp..."
-	@gcc -g -o $(bin)/udp $(src)/udp.c $(build)/argparse.o
 
 argparse.o: $(lib)/argparse/argparse.c $(build)
 	@echo "Compiling argparse lib..."
