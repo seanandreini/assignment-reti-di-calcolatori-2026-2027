@@ -92,7 +92,7 @@ Il software è stato sviluppato in C e compilato sia su macOS/Linux sia su Windo
 % SEZIONE 1.1: USO DELL'INTELLIGENZA ARTIFICIALE
 % ==========================================
 \section{Uso dell'intelligenza artificiale}
-Per alcune parti del codice è stato usato il supporto da parte di Gemini, in particolare per le parti dove non avevamo alcune conoscenze (i punti in cui è stato usato sono segnalati nel codice e nei commenti).
+Per alcune parti del codice è stato usato il supporto da parte di Gemini e Claude, in particolare per le parti dove non avevamo alcune conoscenze (i punti in cui l'AI è stata usata sono segnalati nel codice e nei commenti).
 
 % ==========================================
 % SEZIONE 2: ARCHITETTURA E SCELTE PROGETTUALI
@@ -139,7 +139,7 @@ struct packet {
 La conversione del tempo UNIX (calcolato tramite \texttt{gettimeofday}) nel formato NTP richiede l'aggiunta di una costante di offset pari a \texttt{2208988800UL} (la differenza in secondi tra l'epoca NTP del 1900 e quella UNIX del 1970). Per evitare problemi di byte-ordering tra macchine con diversa endianness, i dati numerici del timestamp vengono sistematicamente convertiti in Network Byte Order tramite \texttt{htonl()} prima della trasmissione e riconvertiti tramite \texttt{ntohl()} alla ricezione.
 
 \subsection{La Logica dell'Echo con Modifica del Payload}
-Per adempiere al requisito di modifica del pacchetto, la logica del server si occupa di estrarre il testo inviato dal client e di sovrascriverlo inserendo il prefisso \texttt{"[SERVER ECHO] "}. Ad esempio, se il client invia il messaggio \texttt{"ciao"}, il server risponde rispedendo un pacchetto contenente lo stesso timestamp originale ma con messaggio \texttt{"[SERVER ECHO] ciao"}.
+Per soddisfare il requisito di modifica del pacchetto, la logica del server si occupa di estrarre il testo inviato dal client e di sovrascriverlo inserendo il prefisso \texttt{"[SERVER ECHO] "}. Ad esempio, se il client invia il messaggio \texttt{"ciao"}, il server risponde rispedendo un pacchetto contenente lo stesso timestamp originale ma con messaggio \texttt{"[SERVER ECHO] ciao"}.
 
 \subsection{Gestione dei Timeout e Socket Non Bloccanti}
 Nelle comunicazioni UDP, la perdita di un pacchetto porterebbe il client a bloccarsi indefinitamente in attesa di un feedback. Per evitare questa vulnerabilità, è stata configurata l'opzione di socket \texttt{SO\_RCVTIMEO} con un limite massimo di attesa di 2 secondi sia per la ricezione UDP sia per quella TCP:
