@@ -1,0 +1,195 @@
+\documentclass[12pt,a4paper,oneside]{article}
+
+% --- PACCHETTI STANDARD E LINGUA ---
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{a4paper, top=3cm, bottom=3cm, left=2.5cm, right=2.5cm}
+
+% --- GRAFICA E TABELLE ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% --- FORMATTAZIONE DEL CODICE (Listings) ---
+\usepackage{listings}
+\definecolor{mGreen}{rgb}{0,0.6,0}
+\definecolor{mGray}{rgb}{0.5,0.5,0.5}
+\definecolor{mPurple}{rgb}{0.58,0,0.82}
+\definecolor{backgroundColour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{CStyle}{
+    backgroundcolor=\color{backgroundColour},   
+    commentstyle=\color{mGreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{mGray},
+    stringstyle=\color{mPurple},
+    basicstyle=\footnotesize\ttfamily,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C
+}
+
+% --- CONFIGURAZIONE COLLEGAMENTI ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={Relazione Assignment Reti di Calcolatori},
+}
+
+\begin{document}
+
+% ==========================================
+% FRONTESPIZIO
+% ==========================================
+\begin{titlepage}
+    \centering
+    {\large Università degli Studi di Firenze\par}
+    {\small Corso di Laurea Triennale in Informatica\par}
+    \vspace{1cm}
+    {\LARGE\bfseries Progettazione e Analisi di un Applicativo di Rete Client/Server TCP/UDP con Misurazione del RTT\par}
+    \vspace{1.5cm}
+    {\large Andrea Bertini \quad\textbullet\quad Sean Andreini\par}
+    \vspace{2cm}
+    {\small Progetto per il corso di Reti di Calcolatori\par}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ==========================================
+% SEZIONE 1: INTRODUZIONE
+% ==========================================
+\section{Introduzione}
+L'obiettivo di questo assignment è costruire un applicativo client/server che scambia pacchetti usando TCP e UDP.
+
+L'applicazione può funzionare in modalità client (invia richieste) o server (risponde con un echo modificato). Sono state implementate le funzionalità richieste, sia obbligatorie sia opzionali:
+\begin{itemize}
+    \item configurazione dei parametri a runtime: porta, protocollo, indirizzo host, numero di pacchetti;
+    \item meccanismo di eco nel server che modifica il payload prima di rispedirlo;
+    \item inclusione nel payload di un timestamp in formato RFC 8877 per calcolare il Round Trip Time;
+    \item opzione per disattivare Nagle su TCP tramite \texttt{TCP\_NODELAY}.
+\end{itemize}
+
+Il software è stato sviluppato in C e compilato sia su macOS/Linux sia su Windows.
+
+% ==========================================
+% SEZIONE 1.1: USO DELL'INTELLIGENZA ARTIFICIALE
+% ==========================================
+\section{Uso dell'intelligenza artificiale}
+Per alcune parti del codice è stato usato il supporto da parte di Gemini, in particolare per le parti dove non avevamo alcune conoscenze (i punti in cui è stato usato sono segnalati nel codice e nei commenti).
+
+% ==========================================
+% SEZIONE 2: ARCHITETTURA E SCELTE PROGETTUALI
+% ==========================================
+\section{Architettura e Scelte Progettuali}
+
+\subsection{Unificazione dell'Applicativo}
+Invece di realizzare due programmi separati per TCP e UDP, si è mantenuta un'unica applicazione in \texttt{main.c}. La modalità viene scelta a runtime tramite argomenti da riga di comando.
+
+Questa opzione ha permesso di:
+\begin{enumerate}
+    \item condividere le strutture dati principali, come il pacchetto e il calcolo del timestamp, riducendo la duplicazione;
+    \item compilare e gestire un unico sorgente con un \texttt{makefile} semplice.
+\end{enumerate}
+
+\subsection{Gestione degli Argomenti a Runtime}
+Per leggere i parametri da riga di comando è stata integrata la libreria open-source \texttt{argparse}. In questo modo il programma accetta flag come \texttt{-p} per la porta, \texttt{-u} per UDP, \texttt{-l} per server, \texttt{-H} per l'indirizzo host, \texttt{-n} per il numero di pacchetti e \texttt{-N} per disattivare Nagle.
+
+Il programma fornisce anche automaticamente l'aiuto tramite \texttt{--help} o \texttt{-h}.
+
+\subsection{Portabilità del Codice}
+Per garantire il corretto funzionamento sia su macOS sia su Windows, sono state impiegate delle direttive di precompilazione (\texttt{\#ifdef \_WIN32}). Su sistemi Windows, il programma provvede a caricare dinamicamente le librerie di rete richieste (\texttt{Winsock2.h}) all'avvio e a scaricarle alla chiusura del processo tramite la chiamata \texttt{WSACleanup()}.
+
+% ==========================================
+% SEZIONE 3: DETTAGLI IMPLEMENTATIVI
+% ==========================================
+\section{Dettagli Implementativi}
+
+\subsection{Definizione del Pacchetto e Timestamping RFC 8877}
+Per scambiare messaggi e calcolare l'RTT in modo conforme allo standard, è stata definita la struttura \texttt{packet} contenente un payload testuale e una sotto-struttura per il timestamp NTP a 64 bit (diviso in 32 bit per la parte intera dei secondi e 32 bit per la frazione di secondo):
+
+\begin{lstlisting}[style=CStyle, caption={Definizione della struttura del pacchetto e dei timestamp conformi a RFC 8877}]
+struct ntp_timestamp {
+    uint32_t seconds;
+    uint32_t fraction;
+};
+
+struct packet {
+    struct ntp_timestamp ts;
+    char message[MAX_MESSAGE_SIZE];
+};
+\end{lstlisting}
+
+La conversione del tempo UNIX (calcolato tramite \texttt{gettimeofday}) nel formato NTP richiede l'aggiunta di una costante di offset pari a \texttt{2208988800UL} (la differenza in secondi tra l'epoca NTP del 1900 e quella UNIX del 1970). Per evitare problemi di byte-ordering tra macchine con diversa endianness, i dati numerici del timestamp vengono sistematicamente convertiti in Network Byte Order tramite \texttt{htonl()} prima della trasmissione e riconvertiti tramite \texttt{ntohl()} alla ricezione.
+
+\subsection{La Logica dell'Echo con Modifica del Payload}
+Per adempiere al requisito di modifica del pacchetto, la logica del server si occupa di estrarre il testo inviato dal client e di sovrascriverlo inserendo il prefisso \texttt{"[SERVER ECHO] "}. Ad esempio, se il client invia il messaggio \texttt{"ciao"}, il server risponde rispedendo un pacchetto contenente lo stesso timestamp originale ma con messaggio \texttt{"[SERVER ECHO] ciao"}.
+
+\subsection{Gestione dei Timeout e Socket Non Bloccanti}
+Nelle comunicazioni UDP, la perdita di un pacchetto porterebbe il client a bloccarsi indefinitamente in attesa di un feedback. Per evitare questa vulnerabilità, è stata configurata l'opzione di socket \texttt{SO\_RCVTIMEO} con un limite massimo di attesa di 2 secondi sia per la ricezione UDP sia per quella TCP:
+
+\begin{lstlisting}[style=CStyle, caption={Configurazione del timeout di ricezione sul socket}]
+struct timeval timeout = {2, 0}; // 2 secondi di timeout
+setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+\end{lstlisting}
+In caso di mancata risposta entro i limiti, la chiamata di lettura si sblocca, permettendo al client di gestire l'errore senza restare congelato.
+
+% ==========================================
+% SEZIONE 4: TEST E ANALISI SPERIMENTALE
+% ==========================================
+\section{Test e Analisi}
+I test sono stati eseguiti in locale su \texttt{127.0.0.1} usando il programma \texttt{bin/main}. Per avere risultati comparabili, il client ha inviato 20 o 100 pacchetti identici con lo stesso messaggio di prova.
+
+\begin{itemize}
+    \item UDP server: \texttt{./bin/main -l -u -p 12345}
+    \item UDP client: \texttt{printf 'messaggio\\n' | ./bin/main -H 127.0.0.1 -u -p 12345 -n 20}
+    \item TCP server: \texttt{./bin/main -l -p 12345}
+    \item TCP client con Nagle: \texttt{printf 'messaggio\\n' | ./bin/main -H 127.0.0.1 -p 12345 -n 20}
+    \item TCP client senza Nagle: \texttt{printf 'messaggio\\n' | ./bin/main -H 127.0.0.1 -p 12345 -N -n 20}
+    \item UDP senza server: \texttt{printf 'messaggio\\n' | ./bin/main -H 127.0.0.1 -u -p 12346 -n 1}
+\end{itemize}
+
+
+I risultati misurati sono riportati nella tabella seguente:
+\begin{table}[H]
+\centering
+\caption{RTT osservati in ms per i test eseguiti su loopback}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modalità} & \textbf{Min} & \textbf{Max} & \textbf{Avg} \\ \midrule
+UDP 20 pacchetti & 0.099 & 0.309 & 0.122 \\
+TCP 20 pacchetti & 0.090 & 0.135 & 0.108 \\
+TCP 20 pacchetti nonagle & 0.043 & 0.206 & 0.133 \\
+UDP 100 pacchetti & 0.092 & 0.274 & 0.128 \\
+TCP 100 pacchetti & 0.077 & 0.162 & 0.114 \\
+TCP 100 pacchetti nonagle & 0.082 & 0.145 & 0.106 \\\bottomrule
+\end{tabular}
+\end{table}
+
+La prova "UDP senza server" ha confermato la vulnerabilità pratica di UDP: il client invia il messaggio e non riceve alcun RTT, perché non c'è nessun server in ascolto pronto a rispondere.
+ \newpage
+I risultati mostrano che:
+\begin{itemize}
+    \item UDP è veloce ma più variabile: sul test da 100 pacchetti l'RTT medio è salito a 0.128 ms e il valore massimo è diventato 0.274 ms.
+    \item TCP con Nagle rimane stabile su 20 e 100 pacchetti, con RTT medi intorno a 0.108--0.114 ms.
+    \item TCP senza Nagle è più variabile su 20 pacchetti (avg 0.133 ms) ma rimane competitivo su 100 pacchetti (avg 0.106 ms), quindi l'effetto varia con la quantità di pacchetti inviati.
+    \item Il test UDP senza server dimostra chiaramente che UDP non offre una garanzia di consegna: se non è presente un server che risponde, l'unico meccanismo è il timeout configurato.
+\end{itemize}
+
+\end{document}
