@@ -37,16 +37,28 @@
 #define JAN_1970 2208988800UL // detto da gemini
 
 #ifdef _WIN32
-#include <windows.h>
 int gettimeofday(struct timeval* tv, void* tz) {
-  FILETIME ft;
-  unsigned long long t;
-  GetSystemTimeAsFileTime(&ft);
-  t = ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-  t -= 116444736000000000ULL; // differenza epoch Windows/Unix
-  t /= 10; // da 100ns a microsecondi
-  tv->tv_sec  = (long)(t / 1000000);
-  tv->tv_usec = (long)(t % 1000000);
+  static LARGE_INTEGER freq = {0};
+  static LARGE_INTEGER start_qpc = {0};
+  static uint64_t start_epoch_us = 0;
+
+  if (freq.QuadPart == 0) {
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start_qpc);
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    t -= 116444736000000000ULL;
+    start_epoch_us = t / 10;
+  }
+
+  LARGE_INTEGER now_qpc;
+  QueryPerformanceCounter(&now_qpc);
+  uint64_t elapsed_us = (now_qpc.QuadPart - start_qpc.QuadPart) * 1000000ULL / freq.QuadPart;
+  uint64_t now_us = start_epoch_us + elapsed_us;
+
+  tv->tv_sec  = (long)(now_us / 1000000);
+  tv->tv_usec = (long)(now_us % 1000000);
   return 0;
 }
 #endif
