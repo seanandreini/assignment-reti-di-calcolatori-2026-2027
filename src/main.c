@@ -4,11 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// librerire per socket
-/*
-#include <winsock2.h>
-#include <ws2tcpip.h>
-*/
+// socket libraries (different for windows and unix)
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
@@ -29,14 +25,14 @@
   #define SLEEP(s) sleep(s)
 #endif
 
-
 // others
 #include "../lib/argparse/argparse.h"
 
 #define MAX_MESSAGE_SIZE 1024
-#define JAN_1970 2208988800UL // detto da gemini
+#define JAN_1970 2208988800UL // detto da intelligenza artificiale
 
 #ifdef _WIN32
+// uso intelligenza artificiale per implementare gettimeofday su windows, che non ce l'ha
 int gettimeofday(struct timeval* tv, void* tz) {
   static LARGE_INTEGER freq = {0};
   static LARGE_INTEGER start_qpc = {0};
@@ -63,12 +59,13 @@ int gettimeofday(struct timeval* tv, void* tz) {
 }
 #endif
 
+// struct for timestamp of packet
 struct ntp_timestamp{
   uint32_t seconds;
   uint32_t fraction;
 };
 
-//* FATTO CON GEMINI
+// rfc8877 timestamp (fatto con intelligenza artificiale)
 struct ntp_timestamp get_rfc8877_timestamp() {
   struct timeval tv;
   struct ntp_timestamp ts;
@@ -83,11 +80,13 @@ struct ntp_timestamp get_rfc8877_timestamp() {
   return ts;
 };
 
+// struct for packet
 struct packet{
   struct ntp_timestamp ts;
   char message[MAX_MESSAGE_SIZE];
 };
 
+// tcp client function
 void client_tcp(const char* ip_addr, int port, int num_packets, int nonagle){
   socket_t clientfd = INVALID_SOCKET;
   int result_code;
@@ -142,11 +141,12 @@ void client_tcp(const char* ip_addr, int port, int num_packets, int nonagle){
     }
   }
 
-  CLOSE_SOCKET(clientfd); //! ATTENZIONE A WINDOWS
+  CLOSE_SOCKET(clientfd);
   printf("Connection closed.\n");
   exit(0);  
 }
 
+// udp client function
 void client_udp(const char* ip_addr, int port, int num_packets){
   socket_t sockfd;
   struct sockaddr_in server_addr;
@@ -242,7 +242,7 @@ void server_udp(int port){
   }
 }
 
-
+// tcp server function
 void server_tcp(int port){
   socket_t socketfd, clientfd;
   struct sockaddr_in server_addr, client_addr;
@@ -259,13 +259,13 @@ void server_tcp(int port){
 
   if(bind(socketfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) == -1){
     printf("Error binding socket.\n");
-    CLOSE_SOCKET(socketfd); //! ATTENZIONE A WINDOWS
+    CLOSE_SOCKET(socketfd);
     exit(-1);
   }
   
   if(listen(socketfd, 1) == -1){
     printf("Error listening to port.\n");
-    CLOSE_SOCKET(socketfd); //! ATTENZIONE A WINDOWS
+    CLOSE_SOCKET(socketfd);
     exit(-1);
   }
 
@@ -302,13 +302,12 @@ void server_tcp(int port){
       }
 
       printf("Connection closed from %s:%d.\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-      CLOSE_SOCKET(clientfd); //! ATTENZIONE PER WINDOWS
-    }
-    
+      CLOSE_SOCKET(clientfd);
+    } 
   }
-
 }
 
+// options for argparse library
 static const char *const usages[] = {
   "bin/main [options] [[--] args]",
   "bin/main [options]",
@@ -316,6 +315,7 @@ static const char *const usages[] = {
 };
 
 int main(int argc, const char **argv){
+  // windows socket initialization
   #ifdef _WIN32
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
@@ -345,10 +345,7 @@ int main(int argc, const char **argv){
   
   struct argparse argparse;
   argparse_init(&argparse, options, usages, 0);
-
   argc = argparse_parse(&argparse, argc, argv);
-
-  // printf("%d", listening_mode);
 
   if(listening_mode){
     if(udp_mode){
@@ -372,6 +369,7 @@ int main(int argc, const char **argv){
     }
   }
 
+  // windows socket cleanup
   #ifdef _WIN32
     WSACleanup();
   #endif
